@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="OctaneSDKJava-3.0.0.0-jar-with-dependencies">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/Downloads/Octane_SDK_Java_3_0_0/lib/OctaneSDKJava-3.0.0.0-jar-with-dependencies.jar!/" />
+      <root url="jar://$USER_HOME$/Downloads/Octane_SDK_Java_3_0_0/lib/OctaneSDKJava-3.0.0.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

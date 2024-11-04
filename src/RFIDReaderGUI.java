@@ -104,71 +104,62 @@ public class RFIDReaderGUI {
     }
 
     private void startReading() {
-        // Start each reader in its own thread
-        new Thread(() -> startReader("192.168.10.1", outputArea1, connectionIndicator1)).start(); // Reader 1
-        new Thread(() -> startReader("192.168.10.2", outputArea2, connectionIndicator2)).start(); // Reader 2
+        // Initialize reader1 and reader2 if they are not already initialized
+        if (reader1 == null) {
+            reader1 = new ImpinjReader();
+        }
+        if (reader2 == null) {
+            reader2 = new ImpinjReader();
+        }
+        // Start each reader in its own thread with correct assignment
+        new Thread(() -> startReader(reader1, "192.168.10.1", outputArea1, connectionIndicator1)).start(); // Reader 1
+        new Thread(() -> startReader(reader2, "192.168.10.2", outputArea2, connectionIndicator2)).start(); // Reader 2
     }
 
-    private void startReader(String hostname, JTextArea outputArea, JLabel connectionIndicator) {
-        ImpinjReader reader = new ImpinjReader();
+    private void startReader(ImpinjReader reader, String hostname, JTextArea outputArea, JLabel connectionIndicator) {
         try {
             reader.connect(hostname);
             connectionIndicator.setBackground(Color.GREEN); // Change indicator to green
             appendOutput(outputArea, "Connected to the reader: " + hostname);
 
-            // Set up the settings
+            // Adding a short delay after connecting
+            Thread.sleep(100);
+
+            // Set up the settings as before
             Settings settings = reader.queryDefaultSettings();
             AntennaConfigGroup antennas = settings.getAntennas();
             antennas.disableAll();
             antennas.enableById(new short[]{1});
 
-            // Get values from sliders
             double txPower = txPowerSlider.getValue(); // Get value from the transmit power slider
             double rxSensitivity = rxSensitivitySlider.getValue(); // Get value from the receive sensitivity slider
 
-            // Set transmit power and receive sensitivity based on slider values
             antennas.getAntenna(1).setTxPowerinDbm(txPower);
             antennas.getAntenna(1).setRxSensitivityinDbm(rxSensitivity);
-            appendOutput(outputArea, "Transmit Power: " + txPower + " dBm for " + hostname);
-            appendOutput(outputArea, "Receive Sensitivity: " + rxSensitivity + " dBm for " + hostname);
 
-            settings.getReport().setMode(ReportMode.Individual);
-            settings.getReport().setIncludeAntennaPortNumber(true);
+            // Print out the power and sensitivity for debugging
+            appendOutput(outputArea, "Transmit Power: " + txPower + " dBm, Receive Sensitivity: " + rxSensitivity + " dBm");
+
             reader.applySettings(settings);
             appendOutput(outputArea, "Settings applied for " + hostname + ".");
 
-            // Set the tag report listener
             reader.setTagReportListener((r, report) -> {
                 for (Tag tag : report.getTags()) {
                     String epc = tag.getEpc().toString();
-                    String date = new SimpleDateFormat("yyyy-MM-dd").format(new Date()); // Get current date
-                    String time = new SimpleDateFormat("HH:mm:ss").format(new Date()); // Get current time
-                    // Check if filtering is enabled
+                    String date = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+                    String time = new SimpleDateFormat("HH:mm:ss").format(new Date());
                     if (!filterCheckbox.isSelected() || epc.length() <= 9) {
-                        appendOutput(outputArea, String.format("%-15s %-10s %s", epc, date, time)); // Format the output into columns
+                        appendOutput(outputArea, String.format("%-15s %-10s %s", epc, date, time));
                     }
                 }
             });
 
-            // Start the reader
             reader.start();
             appendOutput(outputArea, "Reading started on " + hostname + ". Press Stop Reading to stop.");
 
-            // Keep the application running
-            Thread.sleep(Long.MAX_VALUE);
         } catch (OctaneSdkException | InterruptedException e) {
             e.printStackTrace();
-        } finally {
-            try {
-                if (reader != null) {
-                    reader.stop();
-                    reader.disconnect();
-                    connectionIndicator.setBackground(Color.RED); // Change indicator to red
-                    appendOutput(outputArea, "Disconnected from the reader.");
-                }
-            } catch (OctaneSdkException e) {
-                e.printStackTrace();
-            }
+            appendOutput(outputArea, "Error with " + hostname + ": " + e.getMessage());
         }
     }
 
@@ -177,7 +168,7 @@ public class RFIDReaderGUI {
             try {
                 reader1.stop();
                 reader1.disconnect();
-                connectionIndicator1.setBackground(Color.RED); // Change indicator to red
+                connectionIndicator1.setBackground(Color.RED);
                 appendOutput(outputArea1, "Disconnected from Reader 1.");
             } catch (OctaneSdkException e) {
                 e.printStackTrace();
@@ -187,7 +178,7 @@ public class RFIDReaderGUI {
             try {
                 reader2.stop();
                 reader2.disconnect();
-                connectionIndicator2.setBackground(Color.RED); // Change indicator to red
+                connectionIndicator2.setBackground(Color.RED);
                 appendOutput(outputArea2, "Disconnected from Reader 2.");
             } catch (OctaneSdkException e) {
                 e.printStackTrace();

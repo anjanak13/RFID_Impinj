@@ -1,11 +1,15 @@
+package com.example;
+
 import javax.swing.*;
+import com.example.FirebaseInitializer;
 import com.impinj.octane.*;
 import com.google.cloud.firestore.Firestore;
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.DocumentReference;
 import java.util.HashMap;
 import java.util.Map;
-
+import java.util.Timer;
+import java.util.TimerTask;
 import com.google.cloud.firestore.WriteResult;
 
 import java.awt.*;
@@ -15,16 +19,16 @@ import java.util.Date;
 public class RFIDReaderGUI {
     private ImpinjReader reader1;
     private ImpinjReader reader2;
-    private JTextArea outputArea1;
-    private JTextArea outputArea2;
-    private JButton startButton;
-    private JButton stopButton;
-    private JButton clearButton;
-    private JSlider txPowerSlider;
-    private JSlider rxSensitivitySlider;
-    private JCheckBox filterCheckbox;
-    private JLabel connectionIndicator1;
-    private JLabel connectionIndicator2;
+    private final JTextArea outputArea1;
+    private final JTextArea outputArea2;
+    private final JSlider txPowerSlider;
+    private final JSlider rxSensitivitySlider;
+    private final JCheckBox filterCheckbox;
+    private final JLabel connectionIndicator1;
+    private final JLabel connectionIndicator2;
+
+    private final Map<String, Map<String, Map<String, String>>> tagDataBuffer = new HashMap<>();
+    private final Timer updateTimer = new Timer(true); // Daemon timer
 
     public RFIDReaderGUI() {
         FirebaseInitializer.initializeFirebase(); // Initialize Firebase
@@ -41,9 +45,9 @@ public class RFIDReaderGUI {
         outputArea2.setEditable(false);
         JScrollPane scrollPane2 = new JScrollPane(outputArea2);
 
-        startButton = new JButton("Start Reading");
-        stopButton = new JButton("Stop Reading");
-        clearButton = new JButton("Clear Output");
+        JButton startButton = new JButton("Start Reading");
+        JButton stopButton = new JButton("Stop Reading");
+        JButton clearButton = new JButton("Clear Output");
 
         startButton.addActionListener(e -> startReading());
         stopButton.addActionListener(e -> stopReading());
@@ -94,6 +98,14 @@ public class RFIDReaderGUI {
 
         appendOutput(outputArea1, String.format("%-15s %-10s %s", "Tag #", "Date", "Time"));
         appendOutput(outputArea2, String.format("%-15s %-10s %s", "Tag #", "Date", "Time"));
+
+        // Schedule periodic Firebase updates
+        updateTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                flushDataToFirestore();
+            }
+        }, 10000, 10000); // Start after 10 seconds, repeat every 10 seconds
     }
 
     private JLabel createConnectionIndicator() {
@@ -143,7 +155,7 @@ public class RFIDReaderGUI {
 
                     if (!filterCheckbox.isSelected() || epc.length() <= 9) {
                         appendOutput(outputArea, String.format("%-15s %-10s %s", epc, date, time));
-                        sendDataToFirestore(epc, hostname, date, time); // Send data to Firestore
+                        bufferTagData(epc, hostname, date, time); // Buffer data
                     }
                 }
             });
@@ -192,29 +204,39 @@ public class RFIDReaderGUI {
         appendOutput(outputArea2, String.format("%-15s %-10s %s", "EPC", "Date", "Time"));
     }
 
-    private void sendDataToFirestore(String epc, String readerName, String date, String time) {
+    private void bufferTagData(String epc, String readerName, String date, String time) {
+        synchronized (tagDataBuffer) {
+            tagDataBuffer
+                    .computeIfAbsent(readerName, k -> new HashMap<>())
+                    .put(epc, Map.of("date", date, "time", time));
+        }
+    }
+
+    private void flushDataToFirestore() {
         Firestore db = FirebaseInitializer.getFirestore();
 
-        // Define the path: "RFIDReaders/{readerName}/{epc}"
-        DocumentReference tagDocRef = db.collection("RFIDReaders")
-                .document(readerName)
-                .collection(epc)
-                .document("details"); // Can name the document to avoid conflicts
+        synchronized (tagDataBuffer) {
+            for (String readerName : tagDataBuffer.keySet()) {
+                Map<String, Map<String, String>> readerTags = tagDataBuffer.get(readerName);
+                for (String epc : readerTags.keySet()) {
+                    Map<String, String> tagData = readerTags.get(epc);
 
-        // Data to store in each tag document
-        Map<String, Object> tagData = new HashMap<>();
-        tagData.put("time", time);  // Storing time
-        tagData.put("date", date);  // Storing date
+                    DocumentReference tagDocRef = db.collection("RFIDReaders")
+                            .document(readerName)
+                            .collection(epc)
+                            .document("details");
 
-        try {
-            // Set the tag document with the time field
-            ApiFuture<WriteResult> future = tagDocRef.set(tagData);
-
-            // Wait for the operation to complete and get the result
-            WriteResult result = future.get();
-            System.out.println("Tag data for " + epc + " added to reader: " + readerName + " at " + result.getUpdateTime());
-        } catch (Exception e) {
-            System.err.println("Error adding tag data: " + e.getMessage());
+                    try {
+                        ApiFuture<WriteResult> future = tagDocRef.set(tagData);
+                        WriteResult result = future.get();
+                        System.out.println("Tag data for " + epc + " added to reader: " + readerName
+                                + " at " + result.getUpdateTime());
+                    } catch (Exception e) {
+                        System.err.println("Error adding tag data: " + e.getMessage());
+                    }
+                }
+            }
+            tagDataBuffer.clear(); // Clear the buffer after flushing
         }
     }
 

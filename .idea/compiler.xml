@@ -9,5 +9,6 @@
         <module name="Java_GUI_Interface copy" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel target="14" />
   </component>
 </project>

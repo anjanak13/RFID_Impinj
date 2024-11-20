@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import com.google.cloud.firestore.WriteResult;
+import com.google.cloud.firestore.SetOptions;
 
 import java.awt.*;
 import java.text.SimpleDateFormat;
@@ -26,6 +27,7 @@ public class RFIDReaderGUI {
     private final JCheckBox filterCheckbox;
     private final JLabel connectionIndicator1;
     private final JLabel connectionIndicator2;
+    private final JTextField raceNameField; // Field for specifying race name
 
     private final Map<String, Map<String, Map<String, String>>> tagDataBuffer = new HashMap<>();
     private final Timer updateTimer = new Timer(true); // Daemon timer
@@ -65,6 +67,11 @@ public class RFIDReaderGUI {
 
         filterCheckbox = new JCheckBox("Filter EPCs with more than 9 characters");
 
+        raceNameField = new JTextField(20); // Input for race name
+        JPanel racePanel = new JPanel();
+        racePanel.add(new JLabel("Race Name:"));
+        racePanel.add(raceNameField);
+
         JPanel panel = new JPanel();
         panel.add(startButton);
         panel.add(stopButton);
@@ -90,6 +97,7 @@ public class RFIDReaderGUI {
         indicatorPanel.add(connectionIndicator2);
 
         frame.getContentPane().setLayout(new BoxLayout(frame.getContentPane(), BoxLayout.Y_AXIS));
+        frame.getContentPane().add(racePanel);
         frame.getContentPane().add(indicatorPanel);
         frame.getContentPane().add(outputPanel);
         frame.getContentPane().add(panel);
@@ -103,7 +111,12 @@ public class RFIDReaderGUI {
         updateTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                flushDataToFirestore();
+                String raceName = raceNameField.getText().trim();
+                if (!raceName.isEmpty()) {
+                    flushDataToFirestore(raceName);
+                } else {
+                    System.err.println("Race name is empty. Cannot flush data to Firestore.");
+                }
             }
         }, 10000, 10000); // Start after 10 seconds, repeat every 10 seconds
     }
@@ -212,25 +225,40 @@ public class RFIDReaderGUI {
         }
     }
 
-    private void flushDataToFirestore() {
-        Firestore db = FirebaseInitializer.getFirestore();
+    private void ensureAncestorDocumentExists(Firestore db, String raceName) {
+        DocumentReference ancestorDocRef = db.collection("RFIDReaders").document(raceName);
+        try {
+            ApiFuture<WriteResult> future = ancestorDocRef.set(Map.of("initialized", "true"), SetOptions.merge());
+            future.get(); // Wait for the operation to complete
+            System.out.println("Ancestor document ensured for race: " + raceName);
+        } catch (Exception e) {
+            System.err.println("Error ensuring ancestor document: " + e.getMessage());
+        }
+    }
+    
 
+    private void flushDataToFirestore(String raceName) {
+        Firestore db = FirebaseInitializer.getFirestore();
+    
+        ensureAncestorDocumentExists(db, raceName); // Ensure ancestor document exists
+    
         synchronized (tagDataBuffer) {
             for (String readerName : tagDataBuffer.keySet()) {
                 Map<String, Map<String, String>> readerTags = tagDataBuffer.get(readerName);
                 for (String epc : readerTags.keySet()) {
-                    Map<String, String> tagData = readerTags.get(epc);
-
+                    Map<String, String> tagData = new HashMap<>(readerTags.get(epc)); // Create a mutable copy
+                    tagData.put("dummyField", "true"); // Add the dummy field
+    
                     DocumentReference tagDocRef = db.collection("RFIDReaders")
-                            .document(readerName)
-                            .collection(epc)
-                            .document("details");
-
+                            .document(raceName)
+                            .collection(readerName)
+                            .document(epc);
+    
                     try {
                         ApiFuture<WriteResult> future = tagDocRef.set(tagData);
                         WriteResult result = future.get();
-                        System.out.println("Tag data for " + epc + " added to reader: " + readerName
-                                + " at " + result.getUpdateTime());
+                        System.out.println("Tag data for " + epc + " added to race: " + raceName
+                                + " and reader: " + readerName + " at " + result.getUpdateTime());
                     } catch (Exception e) {
                         System.err.println("Error adding tag data: " + e.getMessage());
                     }
@@ -239,6 +267,8 @@ public class RFIDReaderGUI {
             tagDataBuffer.clear(); // Clear the buffer after flushing
         }
     }
+    
+    
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(RFIDReaderGUI::new);

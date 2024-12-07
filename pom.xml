@@ -15,7 +15,6 @@
     </properties>
 
     <dependencies>
-        <!-- Firebase Admin SDK or other dependencies go here if needed -->
 
         <!-- Adding Octane SDK JARs as system-scoped dependencies -->
         <dependency>
@@ -33,7 +32,8 @@
             <scope>system</scope>
             <systemPath>${project.basedir}/lib/OctaneSDKJava-3.0.0.0.jar</systemPath>
         </dependency>
-
+        
+        <!-- Firebase Admin SDK or other dependencies go here if needed -->
         <dependency>
             <groupId>com.google.firebase</groupId>
             <artifactId>firebase-admin</artifactId>

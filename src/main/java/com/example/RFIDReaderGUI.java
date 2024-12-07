@@ -247,7 +247,7 @@ public class RFIDReaderGUI {
                 Map<String, Map<String, String>> readerTags = tagDataBuffer.get(readerName);
                 for (String epc : readerTags.keySet()) {
                     Map<String, String> tagData = new HashMap<>(readerTags.get(epc)); // Create a mutable copy
-                    tagData.put("dummyField", "true"); // Add the dummy field
+                    tagData.put("initialized", "true"); // Add the initialized field
     
                     DocumentReference tagDocRef = db.collection("RFIDReaders")
                             .document(raceName)

@@ -17,7 +17,8 @@ dependencies {
     // Firebase Admin SDK
     api 'com.google.firebase:firebase-admin:9.2.0'
 
-    // Impinj SDKs (update paths or versions as needed)
+    // Impinj SDKs (update paths or versions as needed) 
+    // Currently refers to the system lib
     implementation files('lib/OctaneSDKJava-3.0.0.0-jar-with-dependencies.jar')
     implementation files('lib/OctaneSDKJava-3.0.0.0.jar')
 }
@@ -31,7 +32,7 @@ java {
 }
 
 application {
-    mainClass = 'com.example.RFIDReaderGUI' // Replace with your main class
+    mainClass = 'com.example.RFIDReaderGUI' // Replace with your main class if you would like to clone and change the target class to start execution
 }
 
 publishing {
